@@ -18,7 +18,7 @@ ui <- fluidPage(
     sidebarLayout(
         sidebarPanel(
             sliderInput("n", "Stichprobengröße (aka Schwierigkeitsgrad)",
-                        value = 40, min = 10, max = 300, step = 1),
+                        value = 50, min = 30, max = 300, step = 1),
             # sliderInput("bins", "Anzahl Bins", min = 3, value = 20, max = 80, step = 1),
         ),
 
@@ -29,7 +29,8 @@ ui <- fluidPage(
                         verteilungen, selected = character(0)),
            actionButton("button", "Nächster Plot"),
            tableOutput("table"),
-           textOutput("text")
+           textOutput("text"),
+           actionButton("reset", "Neustart")
         )
     )
 )
@@ -38,14 +39,42 @@ ui <- fluidPage(
 server <- function(input, output, session) {
 sampler <- function() sample(verteilungen, size = 1)
 zufall <- reactiveValues(sample = sampler())
-counter <- reactiveValues(richtig = 0, falsch = 0)
+counter <- reactiveValues(richtig = 0, falsch = 0, round = 0)
+
+observeEvent(input$button, counter$round <- counter$round + 1)
+
+observeEvent(input$n, {
+  feedback(inputId = "n", text = "unmöglich", color = "darkred",
+           show = {input$n < 30})
+  feedback(inputId = "n", text = "schwer", color = "red",
+           show = {input$n > 30 && input$n <= 39})
+  feedback(inputId = "n", text = "mittelschwer", color = "orange",
+           show = {input$n > 39 && input$n <= 50})
+  feedback(inputId = "n", text = "medium", color = "yellow",
+                  show = {input$n > 50 && input$n <= 100})
+  feedback(inputId = "n", text = "leicht", color = "darkgreen",
+                  show = {input$n > 100 && input$n <= 200})
+  feedback(inputId = "n", text = "sehr leicht", color = "lightgreen",
+           show = {input$n > 200})
+
+})
+
+observeEvent(input$reset, {
+  zufall$sample <- sampler()
+  counter$richtig <- 0
+  counter$falsch <- 0
+  counter$round <- 0
+})
 
     output$text <- renderText({
 
             paste("Erfolgsquote:",
-                  if(input$button >= 5){
+                  if(counter$round >= 5){
                     paste(
-                      counter$richtig / (counter$richtig + counter$falsch) * 100,
+                      round(
+                        counter$richtig / (counter$richtig + counter$falsch) * 100,
+                        digits = 2
+                        ),
                       "%")
                     } else {
                       "wird erst ab 5 Versuchen angezeigt"
@@ -73,9 +102,13 @@ counter <- reactiveValues(richtig = 0, falsch = 0)
                    test <- input$radio == zufall$sample
                    if(test){
                      counter$richtig <- counter$richtig + 1
-                     showFeedbackSuccess(inputId = "radio", text = "richtig")
+                     showToast(type = "success",
+                               message = "",
+                               keepVisible = TRUE)
                    } else {
                      counter$falsch <- counter$falsch + 1
+                     showToast(type = "error", message = zufall$sample,
+                               keepVisible = TRUE)
                    }
                    disable("radio")
                  })
@@ -84,6 +117,7 @@ counter <- reactiveValues(richtig = 0, falsch = 0)
                                     selected = character(0))
                    zufall$sample <- sampler() # Zufallsgenerator
                    enable("radio")
+                   hideToast(animate = F)
                  })
 
     output$table <- renderTable({
